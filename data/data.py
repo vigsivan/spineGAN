@@ -25,6 +25,7 @@ class Images3D(Dataset):
         *,
         im_size: Tuple[int, int, int] = (64, 256, 256),
         transform: tio.Transform = None,
+        return_tio: bool=False
     ):
         with open(files_list, "rt") as f:
             filenames = f.read().splitlines()
@@ -38,6 +39,7 @@ class Images3D(Dataset):
         self.processing_tsfm = tio.Compose(
             [tio.CropOrPad(im_size), tio.RescaleIntensity(),]
         )
+        self.return_tio = return_tio
 
     def __len__(self):
         return len(self.filenames)
@@ -49,16 +51,17 @@ class Images3D(Dataset):
         resized = self.processing_tsfm(resample(image))
         return resized
 
-    def __getitem__(self, index) -> torch.tensor:
+    def __getitem__(self, index) -> Union[torch.tensor, tio.ScalarImage]:
         image = tio.ScalarImage(self.filenames[index])
         if self.transform:
             image = self.transform(image)
         image = self.__resize(image)
-        return image.data
+        return image if self.return_tio else image.data
 
 
 
-def mask3d_generator(im_size, mask_size, margin=0, ndim=3):
+def mask3d_generator(im_size, mask_size, margin=0):
+    ndim=3
     while True:
         mask = torch.zeros(im_size)
         offsets = [np.random.randint(margin, im_size[i]-mask_size[i]-margin)

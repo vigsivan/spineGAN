@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+from pathlib import Path
 
 class TestOptions:
     def __init__(self):
@@ -8,11 +9,12 @@ class TestOptions:
         self.initialized = False
 
     def initialize(self):
-        self.parser.add_argument('--dataset', type=str, default='paris_streetview',
+        self.parser.add_argument('--dataset', type=str, default='inpainting',
                                  help='The dataset of the experiment.')
-        self.parser.add_argument('--data_file', type=str, default='./imgs/paris-streetview_256x256', help='the file storing testing file paths')
-        self.parser.add_argument('--test_dir', type=str, default='./test_results', help='models are saved here')
-        self.parser.add_argument('--load_model_dir', type=str, default='./checkpoints', help='pretrained models are given here')
+        self.parser.add_argument('--data_file', type=Path, help='the file storing testing file names')
+        self.parser.add_argument('--root_dir', type=Path, help="the root directory")
+        self.parser.add_argument('--test_dir', type=Path, default='./test_results', help='models are saved here')
+        self.parser.add_argument('--load_model_dir', type=Path, help='directory corresponding to a trained model')
         self.parser.add_argument('--seed', type=int, default=1, help='random seed')
         self.parser.add_argument('--gpu_ids', type=str, default='0')
 
@@ -20,12 +22,11 @@ class TestOptions:
         self.parser.add_argument('--random_mask', type=int, default=0,
                                  help='using random mask')
 
-        self.parser.add_argument('--img_shapes', type=str, default='256,256,3',
-                                 help='given shape parameters: h,w,c or h,w')
-        self.parser.add_argument('--mask_shapes', type=str, default='128,128',
-                                 help='given mask parameters: h,w')
+        self.parser.add_argument('--img_shapes', type=str, default='32,64,64',
+                                 help='given shape parameters: d,h,w')
+        self.parser.add_argument('--mask_shapes', type=str, default='16,32,32',
+                                 help='given mask parameters: d,h,w')
         self.parser.add_argument('--mask_type', type=str, default='rect')
-        self.parser.add_argument('--test_num', type=int, default=-1)
         self.parser.add_argument('--mode', type=str, default='save')
         self.parser.add_argument('--phase', type=str, default='test')
 
@@ -40,11 +41,15 @@ class TestOptions:
             self.initialize()
         self.opt = self.parser.parse_args()
 
-        if self.opt.data_file != '':
-            self.opt.dataset_path = self.opt.data_file
+        paths_that_should_exist = (
+            self.opt.data_file, self.opt.root_dir, self.opt.load_model_dir
+        )
 
-        if os.path.exists(self.opt.test_dir) is False:
-            os.mkdir(self.opt.test_dir)
+        for p in paths_that_should_exist:
+            assert os.path.exists(p)
+
+
+        os.makedirs(self.opt.test_dir, exist_ok=True)
 
         assert self.opt.random_mask in [0, 1]
         self.opt.random_mask = True if self.opt.random_mask == 1 else False
@@ -65,10 +70,10 @@ class TestOptions:
         self.opt.model_folder += '_randmask-' + self.opt.mask_type if self.opt.random_mask else ''
         if self.opt.random_mask:
             self.opt.model_folder += '_seed-' + str(self.opt.seed)
-        self.opt.saving_path = os.path.join(self.opt.test_dir, self.opt.model_folder)
+        self.opt.saving_path = self.opt.test_dir/self.opt.model_folder
 
-        if os.path.exists(self.opt.saving_path) is False and self.opt.mode == 'save':
-            os.mkdir(self.opt.saving_path)
+        if self.opt.mode == 'save':
+            os.makedirs(self.opt.saving_path, exist_ok=True)
 
         args = vars(self.opt)
 

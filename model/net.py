@@ -554,10 +554,6 @@ class InpaintingModel_GMCNN(BaseModel):
         }
 
     def evaluate(self, im_in, mask):
-        im_in = torch.from_numpy(im_in).type(torch.FloatTensor).cuda() / 127.5 - 1
-        mask = torch.from_numpy(mask).type(torch.FloatTensor).cuda()
-        im_in = im_in * (1 - mask)
         xin = torch.cat((im_in, mask), 1)
         ret = self.netGM(xin) * mask + im_in * (1 - mask)
-        ret = (ret.cpu().detach().numpy() + 1) * 127.5
-        return ret.astype(np.uint8)
+        return ret
