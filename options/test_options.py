@@ -17,6 +17,8 @@ class TestOptions:
         self.parser.add_argument('--load_model_dir', type=Path, help='directory corresponding to a trained model')
         self.parser.add_argument('--seed', type=int, default=1, help='random seed')
         self.parser.add_argument('--gpu_ids', type=str, default='0')
+        self.parser.add_argument('--scratch', action='store_true', default=False)
+        self.parser.add_argument('--saving_path', type=Path)
 
         self.parser.add_argument('--model', type=str, default='gmcnn')
         self.parser.add_argument('--random_mask', type=int, default=0,
@@ -44,6 +46,8 @@ class TestOptions:
         paths_that_should_exist = (
             self.opt.data_file, self.opt.root_dir, self.opt.load_model_dir
         )
+        if self.opt.scratch:
+            paths_that_should_exist = paths_that_should_exist[:-1]
 
         for p in paths_that_should_exist:
             assert os.path.exists(p)
@@ -70,7 +74,8 @@ class TestOptions:
         self.opt.model_folder += '_randmask-' + self.opt.mask_type if self.opt.random_mask else ''
         if self.opt.random_mask:
             self.opt.model_folder += '_seed-' + str(self.opt.seed)
-        self.opt.saving_path = self.opt.test_dir/self.opt.model_folder
+        if not self.opt.saving_path:
+            self.opt.saving_path = self.opt.test_dir/self.opt.model_folder
 
         if self.opt.mode == 'save':
             os.makedirs(self.opt.saving_path, exist_ok=True)

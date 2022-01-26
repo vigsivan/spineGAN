@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+from pathlib import Path
 
 class DebugOptions:
     def __init__(self):
@@ -54,10 +55,10 @@ class TrainOptions:
         # experiment specifics
         self.parser.add_argument('--dataset', type=str, default='paris_streetview',
                                  help='dataset of the experiment.')
-        self.parser.add_argument('--data_file', type=str, default='', help='the file storing training image paths')
-        self.parser.add_argument('--root_dir', type=str, default=None, help='the root directory of the training files')
+        self.parser.add_argument('--data_file', type=Path, default='', help='the file storing training image paths')
+        self.parser.add_argument('--root_dir', type=Path, default=None, help='the root directory of the training files')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2')
-        self.parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='models are saved here')
+        self.parser.add_argument('--checkpoint_dir', type=Path, default=None, help='models are saved here')
         self.parser.add_argument('--load_model_dir', type=str, default='', help='pretrained models are given here')
         self.parser.add_argument('--phase', type=str, default='train')
 
@@ -70,7 +71,7 @@ class TrainOptions:
                                       'the required size is smaller than the given size')
         self.parser.add_argument('--random_mask', type=int, default=1)
         self.parser.add_argument('--mask_type', type=str, default='rect')
-        self.parser.add_argument('--pretrain_network', type=int, default=0)
+        self.parser.add_argument('--pretrain_network', type=int, default=1)
         self.parser.add_argument('--lambda_adv', type=float, default=1e-3)
         self.parser.add_argument('--lambda_rec', type=float, default=1.4)
         self.parser.add_argument('--lambda_ae', type=float, default=1.2)
@@ -82,14 +83,15 @@ class TrainOptions:
         self.parser.add_argument('--lr', type=float, default=1e-5, help='learning rate for training')
 
         self.parser.add_argument('--train_spe', type=int, default=1000)
-        self.parser.add_argument('--epochs', type=int, default=40)
+        self.parser.add_argument('--pretrain_epochs', type=int, default=40)
+        self.parser.add_argument('--finetune_epochs', type=int, default=40)
         self.parser.add_argument('--viz_steps', type=int, default=5)
         self.parser.add_argument('--spectral_norm', type=int, default=1)
 
-        self.parser.add_argument('--img_shapes', type=str, default='32,128,128',
-                                 help='given shape parameters: h,w,c or h,w')
-        self.parser.add_argument('--mask_shapes', type=str, default='16,64,64',
-                                 help='given mask parameters: h,w')
+        self.parser.add_argument('--img_shapes', type=str, default='32,64,64',
+                                 help='given shape parameters: d,h,w')
+        self.parser.add_argument('--mask_shapes', type=str, default='16,32,32',
+                                 help='given mask parameters: d,h,w')
         self.parser.add_argument('--max_delta_shapes', type=str, default='32,32')
         self.parser.add_argument('--margins', type=str, default='0,0')
 
@@ -110,7 +112,9 @@ class TrainOptions:
             self.initialize()
         self.opt = self.parser.parse_args()
 
-        self.opt.dataset_path = self.opt.data_file
+        paths_that_should_exist = (self.opt.data_file, self.opt.root_dir)
+        for p in paths_that_should_exist:
+            assert os.path.exists(p)
 
         str_ids = self.opt.gpu_ids.split(',')
         self.opt.gpu_ids = []
@@ -147,25 +151,12 @@ class TrainOptions:
         str_margins = self.opt.margins.split(',')
         self.opt.margins = [int(x) for x in str_margins]
 
-        # model name and date
-        self.opt.date_str = time.strftime('%Y%m%d-%H%M%S')
-        self.opt.model_name = 'GMCNN'
-        self.opt.model_folder = self.opt.date_str + '_' + self.opt.model_name
-        self.opt.model_folder += '_' + self.opt.dataset
-        self.opt.model_folder += '_b' + str(self.opt.batch_size)
-        self.opt.model_folder += '_s' + str(self.opt.img_shapes[0]) + 'x' + str(self.opt.img_shapes[1])
-        self.opt.model_folder += '_gc' + str(self.opt.g_cnum)
-        self.opt.model_folder += '_dc' + str(self.opt.d_cnum)
-
-        self.opt.model_folder += '_randmask-' + self.opt.mask_type if self.opt.random_mask else ''
-        self.opt.model_folder += '_pretrain' if self.opt.pretrain_network else ''
-
-        if os.path.isdir(self.opt.checkpoint_dir) is False:
-            os.mkdir(self.opt.checkpoint_dir)
-
-        self.opt.model_folder = os.path.join(self.opt.checkpoint_dir, self.opt.model_folder)
-        if os.path.isdir(self.opt.model_folder) is False:
-            os.mkdir(self.opt.model_folder)
+        # NOTE: we call the directory we want to save stuff in the model_dir
+        # as this enables us to use the same variable name in our scripts for
+        # both test and train
+        assert self.opt.checkpoint_dir is not None
+        self.opt.model_folder = self.opt.checkpoint_dir
+        os.makedirs(self.opt.checkpoint_dir, exist_ok=True)
 
         # set gpu ids
         if len(self.opt.gpu_ids) > 0:

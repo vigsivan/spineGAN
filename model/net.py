@@ -213,7 +213,7 @@ class GMCNN(BaseNet):
             self.decoding_layers[0](self.pads(self.decoding_pad_rec[0])(x_d))
         )
         x_d = self.decoding_layers[1](self.pads(self.decoding_pad_rec[1])(x_d))
-        x_out = torch.clamp(x_d, -1, 1)
+        x_out = torch.clamp(x_d, -1, 1) # NOTE: different dynamic range?
         return x_out
 
 

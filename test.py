@@ -5,6 +5,7 @@ import os
 import einops
 import subprocess
 import torchio as tio
+from tqdm import trange
 from data.data import Images3D, mask3d_generator
 from pathlib import Path
 from options.test_options import TestOptions
@@ -31,14 +32,17 @@ ourModel = InpaintingModel_GMCNN(in_channels=2, opt=config)
 ourModel.print_networks()
 ourModel.cuda()
 
-print('Loading pretrained model from {}'.format(config.load_model_dir))
-ourModel.load_networks(getLatest(os.path.join(config.load_model_dir, '*.pth')))
-print('Loading done.')
+if not config.scratch:
+    print('Loading pretrained model from {}'.format(config.load_model_dir))
+    ourModel.load_networks(getLatest(os.path.join(config.load_model_dir, '*.pth')))
+    print('Loading done.')
+else:
+    print("Testing from scratch")
 
 test_num = len(dataset)
 print(f"Running inference on {test_num} images.")
 
-for i in range(test_num):
+for i in trange(test_num):
     image = dataset[i]
     mask, _ = next(mask_generator)
 
@@ -47,12 +51,11 @@ for i in range(test_num):
     im_in = image * (1 - mask)
     
     result = ourModel.evaluate(im_in, mask).detach().cpu()
-    
-    im_in = einops.rearrange(result, 'b c d h w -> (b c) d h w')
-    input_tio = tio.ScalarImage(tensor=im_in)
+    input_tio = tio.ScalarImage(tensor=im_in.detach().cpu().squeeze().unsqueeze(0))
     input_tio.save(config.saving_path/f"input_{i}.nii.gz")
     
-    result = einops.rearrange(result, 'b c d h w -> (b c) d h w')
-    result_tio = tio.ScalarImage(tensor=result)
+    # result = einops.rearrange(result, 'b c d h w -> (b c) d fh w')
+    result_tio = tio.ScalarImage(tensor=result.squeeze().unsqueeze(0))
+    result_tio = tio.RescaleIntensity()(result_tio)
     result_tio.save(config.saving_path/f"output_{i}.nii.gz") 
 print('done.')
