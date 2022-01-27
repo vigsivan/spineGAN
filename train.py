@@ -1,6 +1,7 @@
 import os
 
 from typing import Generator, Dict
+from numpy import pad
 from torch.utils.data import DataLoader
 from model.basemodel import BaseModel
 import torch
@@ -12,12 +13,6 @@ from options.train_options import TrainOptions
 from data.data import Images3D, MedTransform, mask3d_generator
 from model.net import InpaintingModel_GMCNN
 from util.utils import getLatest
-
-def init_horovod():
-    import horovod.torch as hvd
-    hvd.init()
-    torch.cuda.set_device(hvd.local_rank())
-    # TODO
 
 def log_losses(
     losses: Dict[str, float],
@@ -148,7 +143,6 @@ def train(
     optimizers = init_optimizers(ourModel, config.lr, pretrain_network=pretrain)
     ourModel.print_networks()
     if config.load_model_dir != "":
-        breakpoint()
         print("Loading pretrained model from {}".format(config.load_model_dir))
         ourModel.load_networks(getLatest(os.path.join(config.load_model_dir, "*.pth")))
         print("Loading done.")
@@ -171,7 +165,7 @@ def train(
     }
     training_loop(**training_args)
     total_epochs = config.pretrain_epochs if pretrain else config.finetune_epochs + config.pretrain_epochs 
-    ourModel.save_networks(total_epochs+1)
+    ourModel.save_networks(total_epochs)
 
 
 if __name__ == "__main__":
@@ -182,6 +176,7 @@ if __name__ == "__main__":
         config.root_dir,
         im_size=config.img_shapes,
         transform=MedTransform,
+        pad_mode=config.pad_mode
     )
     dataloader = DataLoader(
         dataset, batch_size=config.batch_size, shuffle=True, num_workers=4

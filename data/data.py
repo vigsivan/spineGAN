@@ -25,6 +25,7 @@ class Images3D(Dataset):
         im_size: Tuple[int, int, int] = (64, 256, 256),
         transform: tio.Transform = None,
         return_tio: bool = False,
+        pad_mode: Optional[str]=None
     ):
         with open(files_list, "rt") as f:
             filenames = f.read().splitlines()
@@ -35,8 +36,9 @@ class Images3D(Dataset):
 
         self.transform = transform
         self.im_size = im_size
+        pad_mode = pad_mode if pad_mode else 0.
         self.processing_tsfm = tio.Compose(
-            [tio.CropOrPad(im_size), tio.RescaleIntensity(out_min_max=(-1,1)),]
+            [tio.CropOrPad(im_size, padding_mode=pad_mode), tio.RescaleIntensity(out_min_max=(-1,1)),]
         )
         self.return_tio = return_tio
 
@@ -83,7 +85,7 @@ if __name__ == "__main__":
     app = typer.Typer()
 
     @app.command()
-    def main(
+    def save_dataset_files(
         files_list: Path,
         root_dir: Path,
         savedir: Path,
@@ -106,5 +108,22 @@ if __name__ == "__main__":
             im_in = image * (1 - mask)
             im_in_tio = tio.ScalarImage(tensor=im_in)
             im_in_tio.save(savedir/f"input_{i+10}.nii.gz")
+
+    @app.command()
+    def print_resampled_shapes(
+        files_list: Path,
+        root_dir: Path,
+        im_size:  Tuple[int, int, int]
+    ):
+        with open(files_list, "rt") as f:
+            filenames = f.read().splitlines()
+            filenames = [root_dir/ f for f in filenames]
+            for f in filenames:
+                image = tio.ScalarImage(f)
+                factor = max(im_size) / max(image.spatial_shape)
+                new_spacing = tuple([i / factor for i in image.spacing])
+                resample = tio.Resample(new_spacing)
+                resampled = resample(image)
+                print(f"{f}: {resampled.spatial_shape}")
 
     app()

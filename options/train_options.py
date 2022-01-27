@@ -71,6 +71,7 @@ class TrainOptions:
                                       'the required size is smaller than the given size')
         self.parser.add_argument('--random_mask', type=int, default=1)
         self.parser.add_argument('--mask_type', type=str, default='rect')
+        self.parser.add_argument('--pad_mode', type=str)
         self.parser.add_argument('--pretrain_network', type=int, default=1)
         self.parser.add_argument('--lambda_adv', type=float, default=1e-3)
         self.parser.add_argument('--lambda_rec', type=float, default=1.4)
