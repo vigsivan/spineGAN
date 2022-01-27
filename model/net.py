@@ -353,9 +353,10 @@ class InpaintingModel_GMCNN(BaseModel):
 
         self.netD = None
 
-        self.optimizer_G = torch.optim.Adam(
-            self.netGM.parameters(), lr=opt.lr, betas=(0.5, 0.9)
-        )
+        # self.optimizer_G = torch.optim.Adam(
+        #     self.netGM.parameters(), lr=opt.lr, betas=(0.5, 0.9)
+        # )
+        self.optimizer_G = None
         self.optimizer_D = None
 
         self.wganloss = None
@@ -409,11 +410,11 @@ class InpaintingModel_GMCNN(BaseModel):
                     l_fc_channels=l_fc_channels,
                 ).cuda()
             init_weights(self.netD)
-            self.optimizer_D = torch.optim.Adam(
-                filter(lambda x: x.requires_grad, self.netD.parameters()),
-                lr=opt.lr,
-                betas=(0.5, 0.9),
-            )
+            # self.optimizer_D = torch.optim.Adam(
+            #     filter(lambda x: x.requires_grad, self.netD.parameters()),
+            #     lr=opt.lr,
+            #     betas=(0.5, 0.9),
+            # )
             self.wganloss = WGANLoss()
             self.mrfloss = IDMRFLoss()
 
@@ -424,6 +425,10 @@ class InpaintingModel_GMCNN(BaseModel):
             self.input["rect"],
             self.input["im_in"],
             self.input["gt_local"]
+        )
+        self.optimizer_G, self.optimizer_D = (
+            self.input["optimizer_G"],
+            self.input["optimizer_D"]
         )
         self.mask = self.confidence_mask_layer(self.mask_01)
         self.gin = torch.cat((self.im_in, self.mask_01), dim=1)

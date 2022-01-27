@@ -3,6 +3,7 @@ import os
 from typing import Generator, Dict
 from torch.utils.data import DataLoader
 from model.basemodel import BaseModel
+import torch
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 import einops
@@ -12,6 +13,11 @@ from data.data import Images3D, MedTransform, mask3d_generator
 from model.net import InpaintingModel_GMCNN
 from util.utils import getLatest
 
+def init_horovod():
+    import horovod.torch as hvd
+    hvd.init()
+    torch.cuda.set_device(hvd.local_rank())
+    # TODO
 
 def log_losses(
     losses: Dict[str, float],
@@ -54,9 +60,26 @@ def log_losses(
     writer.add_scalar("reconstruction_loss", losses["G_loss_rec"], total_steps)
     writer.add_scalar("autoencoder_loss", losses["G_loss_ae"], total_steps)
 
+def init_optimizers(model: InpaintingModel_GMCNN, lr: float, pretrain_network: bool):
+    optimizer_G = torch.optim.Adam(
+        model.netGM.parameters(), lr=lr, betas=(0.5, 0.9)
+    )
+    if not pretrain_network:
+        optimizer_D = torch.optim.Adam(
+                    filter(lambda x: x.requires_grad, model.netD.parameters()),
+                    lr=lr,
+                    betas=(0.5, 0.9),
+        )
+    else:
+        optimizer_D = None
+    return {
+        "optimizer_G": optimizer_G,
+        "optimizer_D": optimizer_D
+    }
 
 def training_loop(
-    model: BaseModel,
+    model: InpaintingModel_GMCNN,
+    optimizers: Dict[str, torch.optim.Optimizer],
     dataloader: DataLoader,
     mask_generator: Generator,
     pretrain_network: bool,
@@ -90,6 +113,7 @@ def training_loop(
                 "rect": rect,
                 "im_in": im_in,
                 "gt_local": gt_local,
+                **optimizers
             }
             model.setInput(data_in)
             model.optimize_parameters()
@@ -121,8 +145,10 @@ def train(
 ):
     print("configuring model..")
     ourModel = InpaintingModel_GMCNN(in_channels=2, opt=config).cuda()
+    optimizers = init_optimizers(ourModel, config.lr, pretrain_network=pretrain)
     ourModel.print_networks()
     if config.load_model_dir != "":
+        breakpoint()
         print("Loading pretrained model from {}".format(config.load_model_dir))
         ourModel.load_networks(getLatest(os.path.join(config.load_model_dir, "*.pth")))
         print("Loading done.")
@@ -132,6 +158,7 @@ def train(
     print("training initializing..")
     training_args = {
         "model": ourModel,
+        "optimizers": optimizers,
         "dataloader": dataloader,
         "mask_generator": mask_generator,
         "pretrain_network": pretrain,
@@ -169,6 +196,7 @@ if __name__ == "__main__":
     train(config, dataloader, mask_generator, writer, pretrain=True)
 
     config.pretrain_network = False
+    config.load_model_dir = config.model_folder
 
     print("Pretraining finetuning...")
     train(config, dataloader, mask_generator, writer, pretrain=False)
