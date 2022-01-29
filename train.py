@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Dict, Generator, Optional, Tuple
+from typing import Dict, Generator, Tuple
 
 import einops
 import numpy as np
@@ -11,7 +11,13 @@ from torch.utils.data import DataLoader
 
 from data.data import Images3D, MedTransform, mask3d_generator
 from model.loss import DiscriminatorLoss, GeneratorLoss, ModelLoss
-from model.net import GMCNN, GlobalLocalDiscriminator  # InpaintingModel_GMCNN
+from model.net import GMCNN, GlobalLocalDiscriminator
+from util.utils import (
+    load_models,
+    process_data,
+    process_generator_out,
+    process_discriminator_out,
+)
 from options.train_options import TrainOptions
 
 
@@ -31,60 +37,6 @@ def log_losses(
         loss_str = f"[{epoch}  {step}] "
         loss_str += "[" + " ".join([f"({k}: {v})" for k, v in losses.items()]) + "]"
         print(loss_str)
-
-
-def process_data(data, mask, rect):
-    """Processes the input data into something more convenient"""
-    gt = data.cuda()
-    batch_size = gt.shape[0]
-    mask = einops.repeat(mask, "d h w -> b c d h w", b=batch_size, c=1).cuda()
-    rect = [rect[0, i] for i in range(6)]
-    gt_local = gt[
-        :,
-        :,
-        rect[0] : rect[0] + rect[1],
-        rect[2] : rect[2] + rect[3],
-        rect[4] : rect[4] + rect[5],
-    ]
-    im_in = gt * (1 - mask)
-    gin = torch.cat((im_in, mask), dim=1)
-
-    data_in = {
-        "gt": gt,
-        "mask": mask,
-        "rect": rect,
-        "im_in": im_in,
-        "gt_local": gt_local,
-        "gin": gin,
-    }
-    return data_in
-
-
-def process_generator_out(
-    generator_out: torch.Tensor, inputs: Dict[str, torch.Tensor]
-) -> Dict[str, torch.Tensor]:
-    """Gets the global generated image and the local generated image"""
-    completed = generator_out * inputs["mask"] + inputs["gt"] * (1 - inputs["mask"])
-    completed_local = completed[
-        :,
-        :,
-        inputs["rect"][0] : inputs["rect"][0] + inputs["rect"][1],
-        inputs["rect"][2] : inputs["rect"][2] + inputs["rect"][3],
-        inputs["rect"][4] : inputs["rect"][4] + inputs["rect"][5],
-    ]
-    return {"prediction": generator_out, "global": completed, "local": completed_local}
-
-
-def process_discriminator_out(
-    gt_logits: Tuple[torch.Tensor, torch.Tensor],
-    generator_logits: Tuple[torch.Tensor, torch.Tensor],
-) -> Dict[str, torch.Tensor]:
-    return {
-        "gt_logit": gt_logits[0],
-        "gt_logit_local": gt_logits[1],
-        "generator_logit": generator_logits[0],
-        "generator_logit_local": generator_logits[1],
-    }
 
 
 def get_models_optimizers_and_losses(
@@ -218,34 +170,6 @@ def training_loop(
         if epoch % saves_per_epoch == 0:
             print("saving model ..")
             save_models(models, checkpoint_path, epoch)
-
-
-def load_models(
-    checkpoint_path: Path,
-    models: Dict[str, torch.nn.Module],
-    epoch: Optional[int] = None,
-) -> Path:
-    # NOTE: we expect models path files to be saved with the format
-    # `model_{epoch_number}.pth' so we use a simple heuristic to
-    # load the model from the last-saved epoch (if epoch not provided)
-
-    if epoch is not None:
-        assert os.path.exists(checkpoint_path / f"model_{epoch}.pth")
-    else:
-        epochs = [
-            int(f.split(".")[0].split("_")[-1])
-            for f in os.listdir(checkpoint_path)
-            if f.endswith(".pth")
-        ]
-        epoch = max(epochs)
-
-    assert isinstance(epoch, int)
-    load_path = checkpoint_path / f"model_{epoch}.pth"
-    checkpoint = torch.load(load_path)
-    for model_name in models.keys():
-        models[model_name].load_state_dict(checkpoint[model_name])
-
-    return load_path
 
 
 def train(

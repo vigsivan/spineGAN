@@ -5,57 +5,57 @@ import os
 import einops
 import subprocess
 import torchio as tio
+import json
 from tqdm import trange
 from data.data import Images3D, mask3d_generator
 from pathlib import Path
 from options.test_options import TestOptions
-from model.net import InpaintingModel_GMCNN, generate_mask3d
-from util.utils import generate_rect_mask, generate_stroke_mask, getLatest
+from model.net import GMCNN
+from model.loss import GeneratorLoss
+from util.utils import load_models, process_data, process_generator_out
 
-os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmax([int(x.split()[2]) for x in subprocess.Popen(
+
+if __name__ == "__main__":
+
+    os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmax([int(x.split()[2]) for x in subprocess.Popen(
         "nvidia-smi -q -d Memory | grep -A4 GPU | grep Free", shell=True, stdout=subprocess.PIPE).stdout.readlines()]
-        ))
+    ))
 
-
-config = TestOptions().parse()
-if config.random_mask:
+    config = TestOptions().parse()
     random.seed(config.seed)
     np.random.seed(config.seed)
-    torch.random.seed(config.seed)
+    torch.random.manual_seed(config.seed)
 
-dataset = Images3D(config.data_file, config.root_dir, im_size=config.img_shapes)
-mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
-next(mask_generator)
+    dataset = Images3D(config.data_file, config.root_dir, im_size=config.img_shapes)
+    mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
+    next(mask_generator)
 
-print('configuring model..')
-ourModel = InpaintingModel_GMCNN(in_channels=2, opt=config)
-ourModel.print_networks()
-ourModel.cuda()
+    generator = GMCNN(in_channels=2, out_channels=1, cnum=config.g_cnum, norm=None).cuda().eval()
+    load_models(config.load_model_dir, {"generator": generator})
 
-if not config.scratch:
-    print('Loading pretrained model from {}'.format(config.load_model_dir))
-    ourModel.load_networks(getLatest(os.path.join(config.load_model_dir, '*.pth')))
-    print('Loading done.')
-else:
-    print("Testing from scratch")
-
-test_num = len(dataset)
-print(f"Running inference on {test_num} images.")
-
-for i in trange(test_num):
-    image = dataset[i]
-    mask, _ = next(mask_generator)
-
-    image = einops.repeat(image, 'c d h w -> b c d h w', b=1).cuda()
-    mask = einops.repeat(mask, 'd h w -> b c d h w', b=1, c=1).cuda()
-    im_in = image * (1 - mask)
+    test_num = len(dataset)
+    print(f"Running inference on {test_num} images.")
     
-    result = ourModel.evaluate(im_in, mask).detach().cpu()
-    input_tio = tio.ScalarImage(tensor=im_in.detach().cpu().squeeze().unsqueeze(0))
-    input_tio.save(config.saving_path/f"input_{i}.nii.gz")
-    
-    # result = einops.rearrange(result, 'b c d h w -> (b c) d fh w')
-    result_tio = tio.ScalarImage(tensor=result.squeeze().unsqueeze(0))
-    result_tio = tio.RescaleIntensity()(result_tio)
-    result_tio.save(config.saving_path/f"output_{i}.nii.gz") 
-print('done.')
+    gen_loss = GeneratorLoss(config.lambda_rec, config.lambda_ae)
+    losses = {}
+    for i in trange(test_num):
+        image = dataset[i]
+        mask, rect = next(mask_generator)
+        # process_data expects the data to have a batch dimension
+        image = einops.repeat(image, 'c d h w -> b c d h w', b=1)
+        data = process_data(image, mask, rect)
+        predicted = generator(data["gin"])
+        gen_out = process_generator_out(predicted, data)
+        gen_loss(gen_out, data)
+
+        for ttype, t in zip(("input", "output"), (data["im_in"], gen_out["global"])):
+            t = t.squeeze(0).detach().cpu().numpy()
+            t_tio = tio.ScalarImage(tensor=t)
+            t_tio.save(config.saving_path/f"{ttype}_{i}.nii.gz")
+
+        losses[i] = gen_loss.losses
+
+    with open(config.saving_path/f"loss.json", "w") as f:
+        json.dump(losses, f)
+
+    print('done.')

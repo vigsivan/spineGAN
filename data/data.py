@@ -60,10 +60,10 @@ class Images3D(Dataset):
         return image if self.return_tio else image.data
 
 
-def mask3d_generator(im_size, mask_size, margin=0):
+def mask3d_generator(im_size, mask_size, margin=0, device: torch.device=torch.device("cuda")):
     ndim = 3
     while True:
-        mask = torch.zeros(im_size)
+        mask = torch.zeros(im_size, device=device)
         offsets = [
             np.random.randint(margin, im_size[i] - mask_size[i] - margin)
             for i in range(ndim)
