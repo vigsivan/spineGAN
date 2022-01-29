@@ -19,7 +19,10 @@ from util.utils import (
     process_discriminator_out,
 )
 from options.train_options import TrainOptions
+from accelerate import Accelerator
 
+accelerator = Accelerator()
+device = accelerator.device
 
 def log_losses(
     losses: Dict[str, float],
@@ -49,7 +52,7 @@ def get_models_optimizers_and_losses(
 
     generator = GMCNN(
         in_channels=2, out_channels=1, cnum=config.g_cnum, act=act, norm=None
-    ).cuda()
+    )
     discriminator = GlobalLocalDiscriminator(
         1,
         cnum=config.d_cnum,
@@ -57,8 +60,9 @@ def get_models_optimizers_and_losses(
         g_fc_channels=g_fc_channels,
         l_fc_channels=l_fc_channels,
         spectral_norm=config.spectral_norm,
-    ).cuda()
+    )
 
+    generator, discriminator = accelerator.prepare(generator, discriminator)
     models = {"generator": generator, "discriminator": discriminator}
 
     g_optimizer = torch.optim.Adam(
@@ -70,6 +74,7 @@ def get_models_optimizers_and_losses(
         betas=(0.5, 0.9),
     )
 
+    g_optimizer, d_optimizer = accelerator.prepare(g_optimizer, d_optimizer)
     optimizers = {"generator": g_optimizer, "discriminator": d_optimizer}
 
     if config.pretrain_network:
@@ -79,8 +84,7 @@ def get_models_optimizers_and_losses(
             config.lambda_rec, config.lambda_ae, lambda_adversarial=config.lambda_adv
         )
 
-    g_loss = g_loss.cuda()
-    d_loss = DiscriminatorLoss().cuda()
+    g_loss, d_loss = accelerator.prepare(g_loss, DiscriminatorLoss())
 
     losses = {"generator": g_loss, "discriminator": d_loss}
 
@@ -134,7 +138,8 @@ def training_loop(
                     )
                     disc_out = process_discriminator_out(gt_logits, generated_logits)
                     d_loss = losses["discriminator"](disc_out)
-                    d_loss.backward(retain_graph=True)
+                    accelerator.backward(d_loss, retain_graph=True)
+                    # d_loss.backward(retain_graph=True)
                     optimizers["discriminator"].step()
 
                 # NOTE: we use the outputs of the discriminator to do another forward pass
@@ -149,7 +154,8 @@ def training_loop(
 
             optimizers["generator"].zero_grad()
             g_loss = losses["generator"](gen_out, inputs, disc_out)
-            g_loss.backward()
+            accelerator.backward(g_loss)
+            # g_loss.backward()
             optimizers["generator"].step()
 
             if (i + 1) % viz_steps == 0:
@@ -225,7 +231,7 @@ if __name__ == "__main__":
     dataloader = DataLoader(
         dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
     )
-    mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
+    mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes, device=device)
     next(mask_generator)
     print("data loaded..")
 

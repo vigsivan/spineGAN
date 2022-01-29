@@ -2,7 +2,7 @@ import glob
 import os
 import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -39,11 +39,11 @@ def load_models(
     return load_path
 
 
-def process_data(data: torch.Tensor, mask: torch.Tensor, rect):
+def process_data(data: torch.Tensor, mask: torch.Tensor, rect, device: Union[str,torch.device]="cuda"):
     """Processes the input data into something more convenient"""
-    gt = data.cuda()
+    gt = data.to(device)
     batch_size = gt.shape[0]
-    mask = einops.repeat(mask, "d h w -> b c d h w", b=batch_size, c=1).cuda()
+    mask = einops.repeat(mask, "d h w -> b c d h w", b=batch_size, c=1).to(device)
     rect = [rect[0, i] for i in range(6)]
     gt_local = gt[
         :,
