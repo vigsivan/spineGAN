@@ -3,49 +3,6 @@ import os
 import time
 from pathlib import Path
 
-class DebugOptions:
-    def __init__(self):
-
-        self.dataset="mongoose"
-        self.datafile="/home/vsivan/t2_list.txt"
-        self.gpu_ids='0'
-        self.checkpoint_dir='./checkpoints'
-        self.load_model_dir=""
-        self.phase="train"
-        self.batch_size=2
-        self.random_crop=1
-        self.random_mask=1
-        self.mask_type='rect'
-        self.pretrain_network=0
-        self.lambda_adv = 1e-3
-        self.lambda_rec=1.4
-        self.lambda_ae=1.2
-        self.lambda_mrf=0.05
-        self.lambda_gp=10
-        self.random_seed=False
-        self.padding='SAME'
-        self.D_max_iters=5
-        self.lr=1e-5
-        self.train_spe=1000
-        self.epochs=40
-        self.viz_steps=5
-        self.spectral_norm=1
-        self.img_shapes=(16,32,32)
-        self.mask_shapes=tuple([i//2 for i in self.img_shapes])
-        self.max_delta_shapes=(32,32)
-        self.margins=(0,0)
-        self.g_cnum=32
-        self.d_cnum=64
-        self.vgg19_path='vgg19_weights/imagenet-vgg-verydeep-19.mat'
-        self.date_str = time.strftime('%Y%m%d-%H%M%S')
-        self.model_name = 'GMCNN'
-        self.model_folder = self.date_str + '_' + self.model_name
-        self.model_folder += '_' + self.dataset
-        self.model_folder += '_b' + str(self.batch_size)
-        self.model_folder += '_s' + str(self.img_shapes[0]) + 'x' + str(self.img_shapes[1])
-        self.model_folder += '_gc' + str(self.g_cnum)
-        self.model_folder += '_dc' + str(self.d_cnum)
-
 class TrainOptions:
     def __init__(self):
         self.parser = argparse.ArgumentParser()
@@ -59,7 +16,7 @@ class TrainOptions:
         self.parser.add_argument('--root_dir', type=Path, default=None, help='the root directory of the training files')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2')
         self.parser.add_argument('--checkpoint_dir', type=Path, default=None, help='models are saved here')
-        self.parser.add_argument('--load_model_dir', type=str, default='', help='pretrained models are given here')
+        self.parser.add_argument('--load_model_dir', type=Path, default=None, help='pretrained models are given here')
         self.parser.add_argument('--phase', type=str, default='train')
 
         # input/output sizes
@@ -83,7 +40,7 @@ class TrainOptions:
         self.parser.add_argument('--D_max_iters', type=int, default=5)
         self.parser.add_argument('--lr', type=float, default=1e-5, help='learning rate for training')
 
-        self.parser.add_argument('--train_spe', type=int, default=1000)
+        self.parser.add_argument('--train_spe', type=int, default=5)
         self.parser.add_argument('--pretrain_epochs', type=int, default=40)
         self.parser.add_argument('--finetune_epochs', type=int, default=40)
         self.parser.add_argument('--viz_steps', type=int, default=5)
@@ -157,6 +114,7 @@ class TrainOptions:
         # both test and train
         assert self.opt.checkpoint_dir is not None
         self.opt.model_folder = self.opt.checkpoint_dir
+
         os.makedirs(self.opt.checkpoint_dir, exist_ok=True)
 
         # set gpu ids

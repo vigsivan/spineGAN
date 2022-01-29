@@ -156,7 +156,7 @@ class GMCNN(BaseNet):
             )
         )
         self.pad_list = [nn.ReflectionPad3d(i) for i in required_padding]
-        self.pad_map = {pad: i for i, pad in enumerate(required_padding)}
+        self.pads = {pad: self.pad_list[i] for i, pad in enumerate(required_padding)}
 
         # # padding operations
         # padlen = 49
@@ -166,7 +166,7 @@ class GMCNN(BaseNet):
         # self.pads = nn.ModuleList(self.pads)
 
         self.pad_list = nn.ModuleList(self.pad_list)
-        self.pads = lambda p: self.pad_list[self.pad_map[p]]
+        # self.pads = lambda p: self.pad_list[self.pad_map[p]]
 
     def __pad_hack(self, x, pad_idx):
         if pad_idx >= x.shape[2]:
@@ -175,8 +175,8 @@ class GMCNN(BaseNet):
                 f *= 2
             pad_idx = pad_idx // f
             for _ in range(f - 1):
-                x = self.pads(pad_idx)(x)
-        return self.pads(pad_idx)(x)
+                x = self.pads[pad_idx](x)
+        return self.pads[pad_idx](x)
 
     def forward(self, x):
         x1, x2, x3 = x, x, x
@@ -210,9 +210,9 @@ class GMCNN(BaseNet):
 
         x_d = torch.cat((x1, x2, x3), 1)
         x_d = self.act(
-            self.decoding_layers[0](self.pads(self.decoding_pad_rec[0])(x_d))
+            self.decoding_layers[0](self.pads[self.decoding_pad_rec[0]](x_d))
         )
-        x_d = self.decoding_layers[1](self.pads(self.decoding_pad_rec[1])(x_d))
+        x_d = self.decoding_layers[1](self.pads[self.decoding_pad_rec[1]](x_d))
         x_out = torch.clamp(x_d, -1, 1) # NOTE: different dynamic range?
         return x_out
 
@@ -231,8 +231,8 @@ class Discriminator(BaseNet):
         super(Discriminator, self).__init__()
         self.act = act
         self.norm = norm
-        self.embedding = None
-        self.logit = None
+        # self.embedding = None
+        # self.logit = None
 
         ch = cnum
         self.layers = []
@@ -278,9 +278,9 @@ class Discriminator(BaseNet):
             if self.norm is not None:
                 x = self.norm(x)
             x = self.act(x)
-        self.embedding = x.view(x.size(0), -1)
-        self.logit = self.layers[-1](self.embedding)
-        return self.logit
+        embedding = x.view(x.size(0), -1)
+        logit = self.layers[-1](embedding)
+        return logit
 
 
 class GlobalLocalDiscriminator(BaseNet):
