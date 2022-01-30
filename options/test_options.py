@@ -17,6 +17,7 @@ class TestOptions:
         self.parser.add_argument('--lambda_ae', type=float, default=1.2)
         self.parser.add_argument('--seed', type=int, default=1, help='random seed')
         self.parser.add_argument('--gpu_ids', type=str, default='0')
+        self.parser.add_argument('--epoch', type=int)
 
         self.parser.add_argument('--img_shapes', type=str, default='32,64,64',
                                  help='given shape parameters: d,h,w')

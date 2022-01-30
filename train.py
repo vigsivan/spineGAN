@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from typing import Dict, Generator, Tuple
 
-import einops
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -19,6 +18,7 @@ from util.utils import (
     process_discriminator_out,
 )
 from options.train_options import TrainOptions
+from monai.networks.nets import UNet
 
 
 def log_losses(
@@ -47,9 +47,18 @@ def get_models_optimizers_and_losses(
     g_fc_channels = (np.prod(config.img_shapes) * config.d_cnum * 4) // (16 ** ndim)
     l_fc_channels = (np.prod(config.mask_shapes) * config.d_cnum * 4) // (16 ** ndim)
 
-    generator = GMCNN(
-        in_channels=2, out_channels=1, cnum=config.g_cnum, act=act, norm=None
+    # generator = GMCNN(
+    #     in_channels=2, out_channels=1, cnum=config.g_cnum, act=act, norm=None
+    # ).cuda()
+
+    generator = UNet(
+        spatial_dims=ndim,
+        in_channels=2,
+        out_channels=1,
+        channels=[16, 32, 64, 128],
+        strides=[2, 2, 2],
     ).cuda()
+
     discriminator = GlobalLocalDiscriminator(
         1,
         cnum=config.d_cnum,
@@ -166,7 +175,6 @@ def training_loop(
                     print_to_console=True,
                 )
             steps += 1
-
         if epoch % saves_per_epoch == 0:
             print("saving model ..")
             save_models(models, checkpoint_path, epoch)

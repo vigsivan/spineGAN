@@ -31,7 +31,7 @@ if __name__ == "__main__":
     next(mask_generator)
 
     generator = GMCNN(in_channels=2, out_channels=1, cnum=config.g_cnum, norm=None).cuda().eval()
-    load_models(config.load_model_dir, {"generator": generator})
+    load_models(config.load_model_dir, {"generator": generator}, config.epoch)
 
     test_num = len(dataset)
     print(f"Running inference on {test_num} images.")

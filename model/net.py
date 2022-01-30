@@ -6,6 +6,7 @@ from model.basenet import BaseNet
 from model.layer import (SpectralNorm,)
 import numpy as np
 
+
 # generative multi-column convolutional neural net
 class GMCNN(BaseNet):
     def __init__(
