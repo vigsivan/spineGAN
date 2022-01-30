@@ -13,6 +13,7 @@ from options.test_options import TestOptions
 from model.net import GMCNN
 from model.loss import GeneratorLoss
 from util.utils import load_models, process_data, process_generator_out
+from monai.networks.nets import UNet
 
 
 if __name__ == "__main__":
@@ -30,8 +31,15 @@ if __name__ == "__main__":
     mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
     next(mask_generator)
 
-    generator = GMCNN(in_channels=2, out_channels=1, cnum=config.g_cnum, norm=None).cuda().eval()
-    load_models(config.load_model_dir, {"generator": generator}, config.epoch)
+    # generator = GMCNN(in_channels=2, out_channels=1, cnum=config.g_cnum, norm=None).cuda().eval()
+    generator = UNet(
+        spatial_dims=3,
+        in_channels=2,
+        out_channels=1,
+        channels=[16, 32, 64, 128],
+        strides=[2, 2, 2],
+    ).cuda().eval()
+    load_models(config.load_model_dir, {"generator": generator})
 
     test_num = len(dataset)
     print(f"Running inference on {test_num} images.")
