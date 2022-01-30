@@ -29,7 +29,7 @@ def load_models(
             if f.endswith(".pth")
         ]
         epoch = max(epochs)
-    print(f"Loading checkpoint from {epoch=}")
+    # print(f"Loading checkpoint from {epoch=}")
 
     assert isinstance(epoch, int)
     load_path = checkpoint_path / f"model_{epoch}.pth"
