@@ -19,6 +19,7 @@ from util.utils import (
     process_discriminator_out,
 )
 from options.train_options import TrainOptions
+import horovod.torch as hvd
 
 
 def log_losses(
@@ -70,7 +71,10 @@ def get_models_optimizers_and_losses(
         betas=(0.5, 0.9),
     )
 
+    g_optimizer = hvd.DistributedOptimizer(g_optimizer, named_parameters=generator.named_parameters())
+    d_optimizer = hvd.DistributedOptimizer(d_optimizer, named_parameters=discriminator.named_parameters())
     optimizers = {"generator": g_optimizer, "discriminator": d_optimizer}
+
 
     if config.pretrain_network:
         g_loss = GeneratorLoss(config.lambda_rec, config.lambda_ae)
@@ -184,6 +188,9 @@ def train(
         load_path = load_models(config.load_model_dir, models)
         print(f"Loaded model file {load_path}.")
 
+    for model in models.values():
+        hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+
     print("model setting up..")
     print("training initializing..")
     training_args = {
@@ -214,6 +221,9 @@ def train(
 
 if __name__ == "__main__":
     config = TrainOptions().parse()
+    hvd.init()
+    torch.cuda.set_device(hvd.local_rank())
+
     print("loading data..")
     dataset = Images3D(
         config.data_file,
@@ -222,8 +232,12 @@ if __name__ == "__main__":
         transform=MedTransform,
         pad_mode=config.pad_mode,
     )
+
+    sampler = torch.utils.data.distributed.DistributedSampler(
+        dataset, num_replicas=hvd.size(), rank=hvd.rank())
+
     dataloader = DataLoader(
-        dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
+        dataset, batch_size=config.batch_size, shuffle=True, num_workers=4, sampler=sampler
     )
     mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
     next(mask_generator)
