@@ -14,6 +14,7 @@ from model.loss import DiscriminatorLoss, GeneratorLoss, ModelLoss
 from model.net import GMCNN, GlobalLocalDiscriminator
 from util.utils import (
     load_models,
+    load_distributed_models,
     process_data,
     process_generator_out,
     process_discriminator_out,
@@ -59,9 +60,6 @@ def get_models_optimizers_and_losses(
         spectral_norm=config.spectral_norm,
     ).cuda()
 
-    if config.distributed:
-        generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[config.local_rank])
-        discriminator = torch.nn.parallel.DistributedDataParallel(discriminator, device_ids=[config.local_rank])
 
     models = {"generator": generator, "discriminator": discriminator}
 
@@ -96,15 +94,17 @@ def initialize_distributed(config):
     # From here:
     # https://docs.computecanada.ca/wiki/PyTorch#Using_DistributedDataParallel
     local_rank = int(os.environ["SLURM_LOCALID"])
-    rank = int(os.environ["SLURM_NODID"]) * ngpus_per_node + local_rank
+    rank = int(os.environ["SLURM_NODEID"]) * ngpus_per_node + local_rank
 
-    torch.cuda.set_device(config.local_rank)
+    torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(
         backend=config.dist_backend,
         init_method=config.dist_url,
         world_size=config.world_size,
         rank=rank,
     )
+
+    config.rank = rank
 
 def save_models(models: Dict[str, torch.nn.Module], checkpoint_path: Path, epoch: int):
     torch.save(
@@ -194,8 +194,6 @@ def training_loop(
 def train(
     config, dataloader: DataLoader, mask_generator: Generator, writer: SummaryWriter,
 ):
-    if config.distributed:
-        initialize_distributed(config)
         
     pretrain = config.pretrain_network
     print("configuring models..")
@@ -205,6 +203,12 @@ def train(
         print("Loading pretrained model from {}".format(config.load_model_dir))
         load_path = load_models(config.load_model_dir, models)
         print(f"Loaded model file {load_path}.")
+
+    if config.distributed:
+        generator, discriminator = models["generator"], models["discriminator"]
+        generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[config.local_rank])
+        discriminator = torch.nn.parallel.DistributedDataParallel(discriminator, device_ids=[config.local_rank])
+        models["generator"], models["discriminator"] = generator, discriminator
 
     print("model setting up..")
     print("training initializing..")
@@ -244,7 +248,11 @@ if __name__ == "__main__":
         transform=MedTransform,
         pad_mode=config.pad_mode,
     )
-    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset) if config.distributed else None
+    train_sampler=None
+    if config.distributed:
+        initialize_distributed(config)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+
     dataloader = DataLoader(
         dataset, batch_size=config.batch_size, shuffle=(train_sampler is None), num_workers=4, sampler=train_sampler,
     )

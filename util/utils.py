@@ -10,6 +10,37 @@ import scipy.stats as st
 import torch
 import einops
 
+def load_distributed_models(
+    checkpoint_path: Path,
+    models: Dict[str, torch.nn.Module],
+    rank: int,
+    epoch: Optional[int] = None,
+) -> Path:
+    # NOTE: we expect models path files to be saved with the format
+    # `model_{epoch_number}.pth' so we use a simple heuristic to
+    # load the model from the last-saved epoch (if epoch not provided)
+
+    map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+
+    if epoch is not None:
+        assert os.path.exists(checkpoint_path / f"model_{epoch}.pth")
+    else:
+        epochs = [
+            int(f.split(".")[0].split("_")[-1])
+            for f in os.listdir(checkpoint_path)
+            if f.endswith(".pth")
+        ]
+        epoch = max(epochs)
+
+    assert isinstance(epoch, int)
+    load_path = checkpoint_path / f"model_{epoch}.pth"
+    checkpoint = torch.load(load_path, map_location=map_location)
+    for model_name in models.keys():
+        models[model_name].load_state_dict(checkpoint[model_name])
+
+    return load_path
+
+
 
 def load_models(
     checkpoint_path: Path,

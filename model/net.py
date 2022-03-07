@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from monai.networks.blocks import UpSample
 from model.basenet import BaseNet
 from model.layer import (SpectralNorm,)
+from functools import partial
 import numpy as np
 
 # generative multi-column convolutional neural net
@@ -147,7 +148,7 @@ class GMCNN(BaseNet):
                 + self.decoding_pad_rec
             )
         )
-        self.pad_list = [nn.ReflectionPad3d(i) for i in required_padding]
+        self.pad_list = [partial(F.pad, pad=tuple([i]*6)) for i in required_padding]
         self.pads = {pad: self.pad_list[i] for i, pad in enumerate(required_padding)}
 
         # # padding operations
@@ -157,7 +158,7 @@ class GMCNN(BaseNet):
         #     self.pads[i] = nn.ReflectionPad3d(i)
         # self.pads = nn.ModuleList(self.pads)
 
-        self.pad_list = nn.ModuleList(self.pad_list)
+        # self.pad_list = nn.ModuleList(self.pad_list)
         # self.pads = lambda p: self.pad_list[self.pad_map[p]]
 
     def __pad_hack(self, x, pad_idx):

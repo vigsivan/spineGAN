@@ -20,7 +20,7 @@ class TrainOptions:
         self.parser.add_argument('--phase', type=str, default='train')
 
         # input/output sizes
-        self.parser.add_argument('--batch_size', type=int, default=16, help='input batch size')
+        self.parser.add_argument('--batch_size', type=int, default=4, help='input batch size')
 
         # for setting inputs
         self.parser.add_argument('--random_crop', type=int, default=1,
@@ -60,7 +60,7 @@ class TrainOptions:
         self.parser.add_argument('--d_cnum', type=int, default=64,
                                  help='# of discriminator filters in first conv layer')
 
-        self.parser.add_argument('--distributed', type=bool, default=False)
+        self.parser.add_argument('--distributed', action="store_true")
         self.parser.add_argument('--local_rank', type=int)
         self.parser.add_argument('--world_size', type=int)
         self.parser.add_argument('--dist_backend', type=str)
@@ -124,7 +124,7 @@ class TrainOptions:
         os.makedirs(self.opt.checkpoint_dir, exist_ok=True)
 
         if self.opt.distributed:
-            for i in (self.opt.local_rank, self.opt.world_size):
+            for i in (self.opt.world_size, self.opt.dist_backend, self.opt.dist_url):
                 assert i is not None
             
         # set gpu ids
