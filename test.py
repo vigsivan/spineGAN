@@ -2,13 +2,11 @@ import random
 import numpy as np
 import torch.random
 import os
-import einops
 import subprocess
+from torch.utils.data import DataLoader
 import torchio as tio
 import json
-from tqdm import trange
 from data.data import Images3D, mask3d_generator
-from pathlib import Path
 from options.test_options import TestOptions
 from model.net import GMCNN
 from model.loss import GeneratorLoss
@@ -27,10 +25,11 @@ if __name__ == "__main__":
     torch.random.manual_seed(config.seed)
 
     dataset = Images3D(config.data_file, config.root_dir, im_size=config.img_shapes)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
     mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
     next(mask_generator)
 
-    generator = GMCNN(in_channels=2, out_channels=1, cnum=config.g_cnum, norm=None).cuda().eval()
+    generator = GMCNN(in_channels=2, out_channels=1, cnum=config.g_cnum, norm=None).cuda()
     load_models(config.load_model_dir, {"generator": generator})
 
     test_num = len(dataset)
@@ -38,13 +37,12 @@ if __name__ == "__main__":
     
     gen_loss = GeneratorLoss(config.lambda_rec, config.lambda_ae)
     losses = {}
-    for i in trange(test_num):
-        image = dataset[i]
+    for i, image in enumerate(dataloader):
         mask, rect = next(mask_generator)
         # process_data expects the data to have a batch dimension
-        image = einops.repeat(image, 'c d h w -> b c d h w', b=1)
         data = process_data(image, mask, rect)
-        predicted = generator(data["gin"])
+        with torch.no_grad():
+            predicted = generator(data["gin"])
         gen_out = process_generator_out(predicted, data)
         gen_loss(gen_out, data)
 

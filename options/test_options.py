@@ -18,9 +18,9 @@ class TestOptions:
         self.parser.add_argument('--seed', type=int, default=1, help='random seed')
         self.parser.add_argument('--gpu_ids', type=str, default='0')
 
-        self.parser.add_argument('--img_shapes', type=str, default='32,64,64',
+        self.parser.add_argument('--img_shapes', type=str, default='32,128,128',
                                  help='given shape parameters: d,h,w')
-        self.parser.add_argument('--mask_shapes', type=str, default='16,32,32',
+        self.parser.add_argument('--mask_shapes', type=str, default='16,64,64',
                                  help='given mask parameters: d,h,w')
 
         self.parser.add_argument('--g_cnum', type=int, default=32,

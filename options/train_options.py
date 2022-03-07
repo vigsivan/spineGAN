@@ -46,9 +46,9 @@ class TrainOptions:
         self.parser.add_argument('--viz_steps', type=int, default=5)
         self.parser.add_argument('--spectral_norm', type=int, default=1)
 
-        self.parser.add_argument('--img_shapes', type=str, default='32,64,64',
+        self.parser.add_argument('--img_shapes', type=str, default='32,128,128',
                                  help='given shape parameters: d,h,w')
-        self.parser.add_argument('--mask_shapes', type=str, default='16,32,32',
+        self.parser.add_argument('--mask_shapes', type=str, default='16,64,64',
                                  help='given mask parameters: d,h,w')
         self.parser.add_argument('--max_delta_shapes', type=str, default='32,32')
         self.parser.add_argument('--margins', type=str, default='0,0')
@@ -59,6 +59,12 @@ class TrainOptions:
                                  help='# of generator filters in first conv layer')
         self.parser.add_argument('--d_cnum', type=int, default=64,
                                  help='# of discriminator filters in first conv layer')
+
+        self.parser.add_argument('--distributed', type=bool, default=False)
+        self.parser.add_argument('--local_rank', type=int)
+        self.parser.add_argument('--world_size', type=int)
+        self.parser.add_argument('--dist_backend', type=str)
+        self.parser.add_argument('--dist_url', type=str)
 
         # for id-mrf computation
         self.parser.add_argument('--vgg19_path', type=str, default='vgg19_weights/imagenet-vgg-verydeep-19.mat')
@@ -117,6 +123,10 @@ class TrainOptions:
 
         os.makedirs(self.opt.checkpoint_dir, exist_ok=True)
 
+        if self.opt.distributed:
+            for i in (self.opt.local_rank, self.opt.world_size):
+                assert i is not None
+            
         # set gpu ids
         if len(self.opt.gpu_ids) > 0:
             os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(self.opt.gpu_ids)

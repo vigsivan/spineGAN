@@ -40,7 +40,7 @@ def load_models(
 
 
 def process_data(data: torch.Tensor, mask: torch.Tensor, rect):
-    """Processes the input data into something more convenient"""
+    """Processes the input data to be used in the network"""
     gt = data.cuda()
     batch_size = gt.shape[0]
     mask = einops.repeat(mask, "d h w -> b c d h w", b=batch_size, c=1).cuda()

@@ -59,6 +59,10 @@ def get_models_optimizers_and_losses(
         spectral_norm=config.spectral_norm,
     ).cuda()
 
+    if config.distributed:
+        generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[config.local_rank])
+        discriminator = torch.nn.parallel.DistributedDataParallel(discriminator, device_ids=[config.local_rank])
+
     models = {"generator": generator, "discriminator": discriminator}
 
     g_optimizer = torch.optim.Adam(
@@ -86,6 +90,21 @@ def get_models_optimizers_and_losses(
 
     return models, optimizers, losses
 
+def initialize_distributed(config):
+    ngpus_per_node = torch.cuda.device_count()
+
+    # From here:
+    # https://docs.computecanada.ca/wiki/PyTorch#Using_DistributedDataParallel
+    local_rank = int(os.environ["SLURM_LOCALID"])
+    rank = int(os.environ["SLURM_NODID"]) * ngpus_per_node + local_rank
+
+    torch.cuda.set_device(config.local_rank)
+    torch.distributed.init_process_group(
+        backend=config.dist_backend,
+        init_method=config.dist_url,
+        world_size=config.world_size,
+        rank=rank,
+    )
 
 def save_models(models: Dict[str, torch.nn.Module], checkpoint_path: Path, epoch: int):
     torch.save(
@@ -175,6 +194,9 @@ def training_loop(
 def train(
     config, dataloader: DataLoader, mask_generator: Generator, writer: SummaryWriter,
 ):
+    if config.distributed:
+        initialize_distributed(config)
+        
     pretrain = config.pretrain_network
     print("configuring models..")
     models, optimizers, losses = get_models_optimizers_and_losses(config)
@@ -222,8 +244,9 @@ if __name__ == "__main__":
         transform=MedTransform,
         pad_mode=config.pad_mode,
     )
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset) if config.distributed else None
     dataloader = DataLoader(
-        dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
+        dataset, batch_size=config.batch_size, shuffle=(train_sampler is None), num_workers=4, sampler=train_sampler,
     )
     mask_generator = mask3d_generator(config.img_shapes, config.mask_shapes)
     next(mask_generator)
@@ -237,8 +260,9 @@ if __name__ == "__main__":
     config.pretrain_network = False
     config.load_model_dir = config.checkpoint_dir
 
-    print("Finetuning network...")
-    train(config, dataloader, mask_generator, writer)
+    if config.finetune_epochs > 0:
+        print("Finetuning network...")
+        train(config, dataloader, mask_generator, writer)
 
     writer.export_scalars_to_json(
         os.path.join(config.model_folder, "GMCNN_scalars.json")

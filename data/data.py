@@ -38,7 +38,7 @@ class Images3D(Dataset):
         self.im_size = im_size
         pad_mode = pad_mode if pad_mode else 0.
         self.processing_tsfm = tio.Compose(
-            [tio.CropOrPad(im_size, padding_mode=pad_mode), tio.RescaleIntensity(out_min_max=(-1,1)),]
+            [tio.CropOrPad(im_size, padding_mode="reflect"), tio.RescaleIntensity(out_min_max=(-1,1)),]
         )
         self.return_tio = return_tio
 
@@ -85,6 +85,23 @@ if __name__ == "__main__":
     app = typer.Typer()
 
     @app.command()
+    def save_dataset_images(
+        files_list: Path,
+        root_dir: Path,
+        savedir: Path,
+        im_size: Tuple[int, int, int] = (64, 256, 256),
+    ):
+
+        os.makedirs(savedir, exist_ok=True)
+    
+        dataset = Images3D(files_list, root_dir, im_size=im_size, transform=MedTransform, return_tio=True)
+        filenames = [i.name for i in dataset.filenames]
+        for i in trange(len(dataset)):
+            fname = filenames[i]
+            image: tio.Image = dataset[i]
+            image.save(savedir/fname)
+
+    @app.command()
     def save_dataset_files(
         files_list: Path,
         root_dir: Path,
@@ -99,7 +116,7 @@ if __name__ == "__main__":
         os.makedirs(savedir, exist_ok=True)
     
         dataset = Images3D(files_list, root_dir, im_size=im_size, transform=MedTransform)
-        mask_gen = mask3d_generator(im_size, mask_size)
+        mask_gen = mask3d_generator(im_size, mask_size, device="cpu")
         next(mask_gen)
         for i in trange(savenum):
             image = dataset[i]
